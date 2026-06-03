@@ -74,6 +74,116 @@ impl Tx {
         Ok(())
     }
 
+    pub async fn set<T: crate::Attribute + 'static>(
+        &self,
+        thing: u128,
+        attr: T,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let attr_hash = <T as crate::Attribute>::NAME;
+        let hash = crate::hash_name(attr_hash);
+
+        let attrs: HashSet<u64> = self.storage.get_entity_attrs(thing).into_iter().collect();
+
+        if attrs.contains(&hash) {
+            // Component already exists — overwrite data in-place (same archetype)
+            let archetype_id = compute_archetype_id(&attrs);
+            let key = KeyEncoder::encode(archetype_id, hash, thing);
+            let bytes = postcard::to_allocvec(&attr)?;
+            self.storage.put(&key, &bytes).await?;
+        } else {
+            // Component is new — full add logic
+            let new_attrs: HashSet<u64> = attrs.iter().copied().chain(std::iter::once(hash)).collect();
+            let old_archetype = if !attrs.is_empty() {
+                Some(compute_archetype_id(&attrs))
+            } else {
+                None
+            };
+            let new_archetype = compute_archetype_id(&new_attrs);
+
+            if let Some(old_arch) = old_archetype {
+                for &old_hash in &attrs {
+                    let old_key = KeyEncoder::encode(old_arch, old_hash, thing);
+                    if let Some(data) = self.storage.get(&old_key) {
+                        let new_key = KeyEncoder::encode(new_archetype, old_hash, thing);
+                        self.storage.put(&new_key, &data).await?;
+                    }
+                }
+            }
+
+            let new_key = KeyEncoder::encode(new_archetype, hash, thing);
+            let bytes = postcard::to_allocvec(&attr)?;
+            self.storage.put(&new_key, &bytes).await?;
+            self.storage.set_entity_archetype(thing, new_archetype).await?;
+            self.storage.add_entity_attribute(thing, hash).await?;
+            self.storage.add_entity_reverse_index(thing, hash)?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn remove<T: crate::Attribute + 'static>(
+        &self,
+        thing: u128,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let attr_hash = <T as crate::Attribute>::NAME;
+        let hash = crate::hash_name(attr_hash);
+
+        let mut attrs: HashSet<u64> = self.storage.get_entity_attrs(thing).into_iter().collect();
+
+        if !attrs.remove(&hash) {
+            return Ok(());
+        }
+
+        let old_archetype = compute_archetype_id(
+            &attrs.iter().copied().chain(std::iter::once(hash)).collect()
+        );
+
+        // Delete the old data key
+        self.storage.delete(&KeyEncoder::encode(old_archetype, hash, thing)).await?;
+
+        // Remove from attribute tracking and reverse index
+        self.storage.remove_entity_attribute(thing, hash).await?;
+        self.storage.remove_entity_reverse_index(thing, hash)?;
+
+        if attrs.is_empty() {
+            // Last component removed — delete entity entirely
+            self.storage.delete_entity_archetype(thing).await?;
+        } else {
+            // Migrate remaining data to the new archetype
+            let new_archetype = compute_archetype_id(&attrs);
+            for &remaining_hash in &attrs {
+                let old_key = KeyEncoder::encode(old_archetype, remaining_hash, thing);
+                if let Some(data) = self.storage.get(&old_key) {
+                    let new_key = KeyEncoder::encode(new_archetype, remaining_hash, thing);
+                    self.storage.put(&new_key, &data).await?;
+                }
+            }
+            self.storage.set_entity_archetype(thing, new_archetype).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn destroy(&self, thing: u128) -> Result<(), Box<dyn std::error::Error>> {
+        let attrs: Vec<u64> = self.storage.get_entity_attrs(thing);
+        if attrs.is_empty() {
+            return Ok(());
+        }
+
+        let attr_set: HashSet<u64> = attrs.into_iter().collect();
+        let archetype_id = compute_archetype_id(&attr_set);
+
+        for &hash in &attr_set {
+            self.storage.delete(&KeyEncoder::encode(archetype_id, hash, thing)).await?;
+            self.storage.remove_entity_attribute(thing, hash).await?;
+            self.storage.remove_entity_reverse_index(thing, hash)?;
+        }
+
+        self.storage.delete_entity_archetype(thing).await?;
+
+        Ok(())
+    }
+
     pub async fn commit(self) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }

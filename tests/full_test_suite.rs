@@ -251,3 +251,174 @@ async fn test_complex_archetype_routing() {
         .await;
     assert_eq!(pos_with_player.len(), 2);  // p1 and p2
 }
+
+#[tokio::test]
+async fn test_set_updates_existing_component() {
+    let world = get_test_world();
+    let tx = world.tx().await;
+
+    let id = tx.spawn().await;
+    tx.add(id, Position { x: 1.0, y: 2.0 }).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let tx2 = world.tx().await;
+    tx2.set(id, Position { x: 10.0, y: 20.0 }).await.unwrap();
+    tx2.commit().await.unwrap();
+
+    let positions: Vec<Position> = world.query::<Position>().run().await;
+    assert_eq!(positions.len(), 1);
+    assert!((positions[0].x - 10.0).abs() < 1e-9);
+    assert!((positions[0].y - 20.0).abs() < 1e-9);
+}
+
+#[tokio::test]
+async fn test_set_adds_new_component() {
+    let world = get_test_world();
+    let tx = world.tx().await;
+
+    let id = tx.spawn().await;
+    tx.add(id, Player).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let tx2 = world.tx().await;
+    tx2.set(id, Position { x: 5.0, y: 6.0 }).await.unwrap();
+    tx2.commit().await.unwrap();
+
+    let positions: Vec<Position> = world.query::<Position>().with::<Player>().run().await;
+    assert_eq!(positions.len(), 1);
+}
+
+#[tokio::test]
+async fn test_remove_component() {
+    let world = get_test_world();
+    let tx = world.tx().await;
+
+    let id = tx.spawn().await;
+    tx.add(id, Player).await.unwrap();
+    tx.add(id, Position { x: 1.0, y: 2.0 }).await.unwrap();
+    tx.add(id, Health(100)).await.unwrap();
+    tx.commit().await.unwrap();
+
+    // Remove Health
+    let tx2 = world.tx().await;
+    tx2.remove::<Health>(id).await.unwrap();
+    tx2.commit().await.unwrap();
+
+    let healths: Vec<Health> = world.query::<Health>().run().await;
+    assert_eq!(healths.len(), 0);
+
+    let players: Vec<Player> = world.query::<Player>().run().await;
+    assert_eq!(players.len(), 1);
+}
+
+#[tokio::test]
+async fn test_remove_last_component() {
+    let world = get_test_world();
+    let tx = world.tx().await;
+
+    let id = tx.spawn().await;
+    tx.add(id, Player).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let tx2 = world.tx().await;
+    tx2.remove::<Player>(id).await.unwrap();
+    tx2.commit().await.unwrap();
+
+    let players: Vec<Player> = world.query::<Player>().run().await;
+    assert_eq!(players.len(), 0);
+}
+
+#[tokio::test]
+async fn test_remove_updates_archetype() {
+    let world = get_test_world();
+    let tx = world.tx().await;
+
+    // Two entities with Player + Health
+    let a = tx.spawn().await;
+    tx.add(a, Player).await.unwrap();
+    tx.add(a, Health(100)).await.unwrap();
+
+    let b = tx.spawn().await;
+    tx.add(b, Player).await.unwrap();
+    tx.add(b, Health(200)).await.unwrap();
+    tx.commit().await.unwrap();
+
+    // Remove Health from a
+    let tx2 = world.tx().await;
+    tx2.remove::<Health>(a).await.unwrap();
+    tx2.commit().await.unwrap();
+
+    // Health query: should only find b (has Health)
+    let healths: Vec<Health> = world.query::<Health>().run().await;
+    assert_eq!(healths.len(), 1);
+    assert_eq!(healths[0].0, 200);
+
+    // Player query: should find both
+    let players: Vec<Player> = world.query::<Player>().run().await;
+    assert_eq!(players.len(), 2);
+}
+
+#[tokio::test]
+async fn test_destroy_entity() {
+    let world = get_test_world();
+    let tx = world.tx().await;
+
+    let id = tx.spawn().await;
+    tx.add(id, Player).await.unwrap();
+    tx.add(id, Position { x: 1.0, y: 2.0 }).await.unwrap();
+    tx.add(id, Health(100)).await.unwrap();
+    tx.commit().await.unwrap();
+
+    assert_eq!(world.query::<Player>().run().await.len(), 1);
+
+    let tx2 = world.tx().await;
+    tx2.destroy(id).await.unwrap();
+    tx2.commit().await.unwrap();
+
+    assert_eq!(world.query::<Player>().run().await.len(), 0);
+    assert_eq!(world.query::<Position>().run().await.len(), 0);
+    assert_eq!(world.query::<Health>().run().await.len(), 0);
+}
+
+#[tokio::test]
+async fn test_destroy_twice_is_noop() {
+    let world = get_test_world();
+    let tx = world.tx().await;
+
+    let id = tx.spawn().await;
+    tx.add(id, Player).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let tx2 = world.tx().await;
+    tx2.destroy(id).await.unwrap();
+    tx2.destroy(id).await.unwrap();
+    tx2.commit().await.unwrap();
+
+    assert_eq!(world.query::<Player>().run().await.len(), 0);
+}
+
+#[tokio::test]
+async fn test_destroy_does_not_affect_others() {
+    let world = get_test_world();
+    let tx = world.tx().await;
+
+    let a = tx.spawn().await;
+    tx.add(a, Player).await.unwrap();
+    tx.add(a, Health(100)).await.unwrap();
+
+    let b = tx.spawn().await;
+    tx.add(b, Health(200)).await.unwrap();
+    tx.commit().await.unwrap();
+
+    assert_eq!(world.query::<Player>().run().await.len(), 1);
+    assert_eq!(world.query::<Health>().run().await.len(), 2);
+
+    let tx2 = world.tx().await;
+    tx2.destroy(a).await.unwrap();
+    tx2.commit().await.unwrap();
+
+    assert_eq!(world.query::<Player>().run().await.len(), 0);
+    let healths: Vec<Health> = world.query::<Health>().run().await;
+    assert_eq!(healths.len(), 1);
+    assert_eq!(healths[0].0, 200);
+}

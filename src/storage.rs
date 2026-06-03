@@ -89,6 +89,27 @@ impl Storage {
         Ok(())
     }
 
+    #[allow(clippy::await_solo)]
+    pub async fn remove_entity_attribute(
+        &self,
+        thing_id: u128,
+        attr_hash: u64,
+    ) -> Result<(), Box<dyn Error>> {
+        let key = Self::entity_attr_key(thing_id, attr_hash);
+        self.db.delete(&key)?;
+        Ok(())
+    }
+
+    #[allow(clippy::await_solo)]
+    pub async fn delete_entity_archetype(
+        &self,
+        thing_id: u128,
+    ) -> Result<(), Box<dyn Error>> {
+        let key = Self::entity_to_archetype_key(thing_id);
+        self.db.delete(&key)?;
+        Ok(())
+    }
+
     pub fn get_entity_attrs(&self, thing_id: u128) -> Vec<u64> {
         let prefix = Self::entity_attrs_prefix(thing_id);
         let mut attrs = Vec::new();
@@ -110,6 +131,16 @@ impl Storage {
     ) -> Result<(), Box<dyn Error>> {
         let key = Self::attr_index_key(attr_hash, thing_id);
         self.db.put(&key, b"")?;
+        Ok(())
+    }
+
+    pub fn remove_entity_reverse_index(
+        &self,
+        thing_id: u128,
+        attr_hash: u64,
+    ) -> Result<(), Box<dyn Error>> {
+        let key = Self::attr_index_key(attr_hash, thing_id);
+        self.db.delete(&key)?;
         Ok(())
     }
 
