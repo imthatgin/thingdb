@@ -1,4 +1,4 @@
-use rust_rocksdb::{DB, IteratorMode, WriteBatch};
+use rust_rocksdb::{IteratorMode, WriteBatch, DB};
 use std::error::Error;
 use std::sync::Arc;
 
@@ -8,7 +8,9 @@ pub struct Storage {
 
 impl Clone for Storage {
     fn clone(&self) -> Self {
-        Self { db: self.db.clone() }
+        Self {
+            db: self.db.clone(),
+        }
     }
 }
 
@@ -18,7 +20,6 @@ impl Storage {
         Ok(Self { db: Arc::new(db) })
     }
 
-    #[allow(clippy::await_solo)]
     pub async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Box<dyn Error>> {
         self.db.put(key, value)?;
         Ok(())
@@ -28,7 +29,6 @@ impl Storage {
         self.db.get(key).ok().flatten()
     }
 
-    #[allow(clippy::await_solo)]
     pub async fn delete(&self, key: &[u8]) -> Result<(), Box<dyn Error>> {
         self.db.delete(key)?;
         Ok(())
@@ -58,7 +58,11 @@ impl Storage {
     }
 
     pub fn get_many(&self, keys: &[Vec<u8>]) -> Vec<Option<Vec<u8>>> {
-        keys.iter().map(|k| self.get(k)).collect()
+        self.db
+            .multi_get(keys)
+            .into_iter()
+            .map(|r| r.ok().flatten())
+            .collect()
     }
 
     #[allow(clippy::await_solo)]
@@ -106,10 +110,7 @@ impl Storage {
     }
 
     #[allow(clippy::await_solo)]
-    pub async fn delete_entity_archetype(
-        &self,
-        thing_id: u128,
-    ) -> Result<(), Box<dyn Error>> {
+    pub async fn delete_entity_archetype(&self, thing_id: u128) -> Result<(), Box<dyn Error>> {
         let key = Self::entity_to_archetype_key(thing_id);
         self.db.delete(&key)?;
         Ok(())
@@ -121,8 +122,7 @@ impl Storage {
         self.for_each_with_prefix(&prefix, |_key, value| {
             if value.len() >= 8 {
                 attrs.push(u64::from_le_bytes([
-                    value[0], value[1], value[2], value[3],
-                    value[4], value[5], value[6], value[7],
+                    value[0], value[1], value[2], value[3], value[4], value[5], value[6], value[7],
                 ]));
             }
         });

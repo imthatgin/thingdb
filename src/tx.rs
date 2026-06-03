@@ -44,8 +44,6 @@ impl Tx {
         self.storage.get(key)
     }
 
-    // ── buffered write helpers ──────────────────────────────────────
-
     fn buf_put(&mut self, key: Vec<u8>, value: Vec<u8>) {
         self.pending_data.insert(key.clone(), Some(value.clone()));
         self.puts.push((key, value));
@@ -119,7 +117,12 @@ impl Tx {
 
         // Migrate existing data from old archetype to new archetype
         if let Some(old_arch) = old_archetype {
-            for &old_hash in &attrs.iter().copied().filter(|&h| h != hash).collect::<Vec<u64>>() {
+            for &old_hash in &attrs
+                .iter()
+                .copied()
+                .filter(|&h| h != hash)
+                .collect::<Vec<u64>>()
+            {
                 let old_key = KeyEncoder::encode(old_arch, old_hash, thing);
                 if let Some(data) = self.read_data(&old_key) {
                     let new_key = KeyEncoder::encode(new_archetype, old_hash, thing);
@@ -160,7 +163,8 @@ impl Tx {
             } else {
                 None
             };
-            let new_attrs: HashSet<u64> = attrs.iter().copied().chain(std::iter::once(hash)).collect();
+            let new_attrs: HashSet<u64> =
+                attrs.iter().copied().chain(std::iter::once(hash)).collect();
             let new_archetype = compute_archetype_id(&new_attrs);
 
             if let Some(old_arch) = old_archetype {
@@ -195,9 +199,8 @@ impl Tx {
             return Ok(());
         }
 
-        let old_archetype = compute_archetype_id(
-            &attrs.iter().copied().chain(std::iter::once(hash)).collect(),
-        );
+        let old_archetype =
+            compute_archetype_id(&attrs.iter().copied().chain(std::iter::once(hash)).collect());
 
         // Delete old data key
         self.buf_delete(KeyEncoder::encode(old_archetype, hash, thing));
