@@ -47,7 +47,7 @@ fn get_test_world() -> World {
 async fn test_spawn_returns_incrementing_ids() {
     let world = get_test_world();
     
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
     let id1 = tx.spawn().await;
     let id2 = tx.spawn().await;
     let id3 = tx.spawn().await;
@@ -60,7 +60,7 @@ async fn test_spawn_returns_incrementing_ids() {
 async fn test_add_single_attribute() {
     let world = get_test_world();
     
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
     let thing_id = tx.spawn().await;
     
     tx.add(thing_id, Player).await.unwrap();
@@ -75,7 +75,7 @@ async fn test_add_single_attribute() {
 async fn test_add_multiple_attributes_same_entity() {
     let world = get_test_world();
     
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
     let thing_id = tx.spawn().await;
     
     tx.add(thing_id, Player).await.unwrap();
@@ -97,7 +97,7 @@ async fn test_query_with_single_component() {
     let world = get_test_world();
     
     // Add some entities
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
     
     let p1 = tx.spawn().await;
     tx.add(p1, Player).await.unwrap();
@@ -119,7 +119,7 @@ async fn test_query_with_single_component() {
 async fn test_query_with_multiple_with() {
     let world = get_test_world();
     
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
     
     // Player with Position
     let p1 = tx.spawn().await;
@@ -151,7 +151,7 @@ async fn test_query_with_multiple_with() {
 async fn test_query_with_without() {
     let world = get_test_world();
     
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
     
     // Player with Health
     let p1 = tx.spawn().await;
@@ -178,7 +178,7 @@ async fn test_query_with_without() {
 async fn test_query_with_filter() {
     let world = get_test_world();
     
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
     
     // Players with different health values
     let p1 = tx.spawn().await;
@@ -205,7 +205,7 @@ async fn test_query_with_filter() {
 async fn test_complex_archetype_routing() {
     let world = get_test_world();
     
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
     
     // Archetype 1: Player + Position (2 components)
     let p1 = tx.spawn().await;
@@ -255,13 +255,13 @@ async fn test_complex_archetype_routing() {
 #[tokio::test]
 async fn test_set_updates_existing_component() {
     let world = get_test_world();
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
 
     let id = tx.spawn().await;
     tx.add(id, Position { x: 1.0, y: 2.0 }).await.unwrap();
     tx.commit().await.unwrap();
 
-    let tx2 = world.tx().await;
+    let mut tx2 = world.tx().await;
     tx2.set(id, Position { x: 10.0, y: 20.0 }).await.unwrap();
     tx2.commit().await.unwrap();
 
@@ -274,13 +274,13 @@ async fn test_set_updates_existing_component() {
 #[tokio::test]
 async fn test_set_adds_new_component() {
     let world = get_test_world();
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
 
     let id = tx.spawn().await;
     tx.add(id, Player).await.unwrap();
     tx.commit().await.unwrap();
 
-    let tx2 = world.tx().await;
+    let mut tx2 = world.tx().await;
     tx2.set(id, Position { x: 5.0, y: 6.0 }).await.unwrap();
     tx2.commit().await.unwrap();
 
@@ -291,7 +291,7 @@ async fn test_set_adds_new_component() {
 #[tokio::test]
 async fn test_remove_component() {
     let world = get_test_world();
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
 
     let id = tx.spawn().await;
     tx.add(id, Player).await.unwrap();
@@ -300,7 +300,7 @@ async fn test_remove_component() {
     tx.commit().await.unwrap();
 
     // Remove Health
-    let tx2 = world.tx().await;
+    let mut tx2 = world.tx().await;
     tx2.remove::<Health>(id).await.unwrap();
     tx2.commit().await.unwrap();
 
@@ -314,13 +314,13 @@ async fn test_remove_component() {
 #[tokio::test]
 async fn test_remove_last_component() {
     let world = get_test_world();
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
 
     let id = tx.spawn().await;
     tx.add(id, Player).await.unwrap();
     tx.commit().await.unwrap();
 
-    let tx2 = world.tx().await;
+    let mut tx2 = world.tx().await;
     tx2.remove::<Player>(id).await.unwrap();
     tx2.commit().await.unwrap();
 
@@ -331,7 +331,7 @@ async fn test_remove_last_component() {
 #[tokio::test]
 async fn test_remove_updates_archetype() {
     let world = get_test_world();
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
 
     // Two entities with Player + Health
     let a = tx.spawn().await;
@@ -344,7 +344,7 @@ async fn test_remove_updates_archetype() {
     tx.commit().await.unwrap();
 
     // Remove Health from a
-    let tx2 = world.tx().await;
+    let mut tx2 = world.tx().await;
     tx2.remove::<Health>(a).await.unwrap();
     tx2.commit().await.unwrap();
 
@@ -361,7 +361,7 @@ async fn test_remove_updates_archetype() {
 #[tokio::test]
 async fn test_destroy_entity() {
     let world = get_test_world();
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
 
     let id = tx.spawn().await;
     tx.add(id, Player).await.unwrap();
@@ -371,7 +371,7 @@ async fn test_destroy_entity() {
 
     assert_eq!(world.query::<Player>().run().await.len(), 1);
 
-    let tx2 = world.tx().await;
+    let mut tx2 = world.tx().await;
     tx2.destroy(id).await.unwrap();
     tx2.commit().await.unwrap();
 
@@ -383,13 +383,13 @@ async fn test_destroy_entity() {
 #[tokio::test]
 async fn test_destroy_twice_is_noop() {
     let world = get_test_world();
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
 
     let id = tx.spawn().await;
     tx.add(id, Player).await.unwrap();
     tx.commit().await.unwrap();
 
-    let tx2 = world.tx().await;
+    let mut tx2 = world.tx().await;
     tx2.destroy(id).await.unwrap();
     tx2.destroy(id).await.unwrap();
     tx2.commit().await.unwrap();
@@ -400,7 +400,7 @@ async fn test_destroy_twice_is_noop() {
 #[tokio::test]
 async fn test_destroy_does_not_affect_others() {
     let world = get_test_world();
-    let tx = world.tx().await;
+    let mut tx = world.tx().await;
 
     let a = tx.spawn().await;
     tx.add(a, Player).await.unwrap();
@@ -413,7 +413,7 @@ async fn test_destroy_does_not_affect_others() {
     assert_eq!(world.query::<Player>().run().await.len(), 1);
     assert_eq!(world.query::<Health>().run().await.len(), 2);
 
-    let tx2 = world.tx().await;
+    let mut tx2 = world.tx().await;
     tx2.destroy(a).await.unwrap();
     tx2.commit().await.unwrap();
 

@@ -1,4 +1,4 @@
-use rust_rocksdb::{DB, IteratorMode};
+use rust_rocksdb::{DB, IteratorMode, WriteBatch};
 use std::error::Error;
 use std::sync::Arc;
 
@@ -50,6 +50,11 @@ impl Storage {
                 Err(_) => break,
             }
         }
+    }
+
+    pub fn write_batch(&self, batch: &WriteBatch) -> Result<(), Box<dyn Error>> {
+        self.db.write(batch)?;
+        Ok(())
     }
 
     pub fn get_many(&self, keys: &[Vec<u8>]) -> Vec<Option<Vec<u8>>> {
@@ -156,7 +161,7 @@ impl Storage {
         ids
     }
 
-    fn attr_index_key(attr_hash: u64, thing_id: u128) -> Vec<u8> {
+    pub(crate) fn attr_index_key(attr_hash: u64, thing_id: u128) -> Vec<u8> {
         let mut key = b"ai:".to_vec();
         key.extend_from_slice(&attr_hash.to_le_bytes());
         key.extend_from_slice(&thing_id.to_le_bytes());
@@ -169,13 +174,13 @@ impl Storage {
         prefix
     }
 
-    fn entity_to_archetype_key(thing_id: u128) -> Vec<u8> {
+    pub(crate) fn entity_to_archetype_key(thing_id: u128) -> Vec<u8> {
         let mut key = b"eta:".to_vec();
         key.extend_from_slice(&thing_id.to_le_bytes());
         key
     }
 
-    fn entity_attr_key(thing_id: u128, attr_hash: u64) -> Vec<u8> {
+    pub(crate) fn entity_attr_key(thing_id: u128, attr_hash: u64) -> Vec<u8> {
         let mut key = b"ea:".to_vec();
         key.extend_from_slice(&thing_id.to_le_bytes());
         key.extend_from_slice(&attr_hash.to_le_bytes());

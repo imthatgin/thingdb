@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(async {
-        let tx = world.tx().await;
+        let mut tx = world.tx().await;
 
         let id = tx.spawn().await;
         println!("Spawned entity: {}", id);

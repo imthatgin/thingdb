@@ -49,7 +49,7 @@ async fn test_full_api() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&unique_dir)?;
     let db = World::open_file(unique_dir.join("test.db").to_string_lossy().as_ref())?;
 
-    let tx = db.tx().await;
+    let mut tx = db.tx().await;
 
     let thing_id = tx.spawn().await;
     assert!(thing_id > 0);

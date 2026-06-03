@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let insert_start = Instant::now();
 
     let vip_ids: Vec<u128> = rt.block_on(async {
-        let tx = world.tx().await;
+        let mut tx = world.tx().await;
         // Archetype 1: Player + Position + Health  (1M)
         for i in 0..total / 5 {
             let id = tx.spawn().await;
