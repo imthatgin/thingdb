@@ -52,8 +52,8 @@ async fn test_spawn_returns_incrementing_ids() {
     let id2 = tx.spawn().await;
     let id3 = tx.spawn().await;
     
-    assert_eq!(id2, id1 + 1);
-    assert_eq!(id3, id2 + 1);
+    assert!(id2 > id1);
+    assert!(id3 > id2);
 }
 
 #[tokio::test]

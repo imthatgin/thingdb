@@ -77,3 +77,38 @@ async fn test_full_api() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+/// Verify the proc-macro derive works correctly.
+#[derive(serde::Serialize, serde::Deserialize, thingdb::thingdb_attribute)]
+#[allow(dead_code)]
+struct DerivedPlayer {
+    name: String,
+    level: u32,
+}
+
+#[tokio::test]
+async fn test_derive_macro_implementation() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = std::env::temp_dir();
+    let unique_dir = temp_dir.join(format!("derive_test_{}", std::process::id()));
+    std::fs::create_dir_all(&unique_dir)?;
+    let db = World::open_file(unique_dir.join("derive.db").to_string_lossy().as_ref())?;
+
+    let mut tx = db.tx().await;
+    let id = tx.spawn().await;
+    tx.add(
+        id,
+        DerivedPlayer {
+            name: "Hero".into(),
+            level: 10,
+        },
+    )
+    .await?;
+    tx.commit().await?;
+
+    let results: Vec<DerivedPlayer> = db.query::<DerivedPlayer>().run().await;
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].name, "Hero");
+    assert_eq!(results[0].level, 10);
+
+    Ok(())
+}

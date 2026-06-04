@@ -412,8 +412,6 @@ mod tests {
         assert_eq!(arch.get_component(1, 20).unwrap(), &vec![200]);
     }
 
-    // ── Registry ────────────────────────────────────────────────────
-
     #[test]
     fn test_compute_archetype_id_deterministic() {
         let set1: HashSet<u64> = [10, 20, 30].into_iter().collect();

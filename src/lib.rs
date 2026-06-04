@@ -11,3 +11,4 @@ pub use attribute::{Attribute, hash_name};
 pub use crate::storage::Storage;
 pub use thing::Thing;
 pub use world::World;
+pub use thingdb_derive::thingdb_attribute;

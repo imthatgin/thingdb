@@ -294,3 +294,421 @@ impl Tx {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::archetype::Registry;
+    use crate::Attribute;
+    use serde::{Deserialize, Serialize};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn test_storage() -> Arc<Storage> {
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = format!("/tmp/test_thingdb_tx_{}", counter);
+        let _ = std::fs::remove_dir_all(&path);
+        Arc::new(Storage::open(&path).unwrap())
+    }
+
+    fn test_tx_no_cache() -> Tx {
+        Tx::new(test_storage(), None)
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct Tag;
+
+    impl Attribute for Tag {
+        const NAME: &'static str = "Tag";
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct Pos {
+        x: f64,
+        y: f64,
+    }
+
+    impl Attribute for Pos {
+        const NAME: &'static str = "Pos";
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct Health(u32);
+
+    impl Attribute for Health {
+        const NAME: &'static str = "Health";
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct Score(i64);
+
+    impl Attribute for Score {
+        const NAME: &'static str = "Score";
+    }
+
+    #[tokio::test]
+    async fn test_spawn_returns_incrementing_ids() {
+        let tx = test_tx_no_cache();
+        let id1 = tx.spawn().await;
+        let id2 = tx.spawn().await;
+        let id3 = tx.spawn().await;
+        assert!(id2 > id1);
+        assert!(id3 > id2);
+    }
+
+    #[tokio::test]
+    async fn test_add_single_component_and_commit() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert_eq!(attrs.len(), 1);
+        assert!(attrs.contains(&crate::hash_name("Tag")));
+    }
+
+    #[tokio::test]
+    async fn test_add_multiple_components() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.add(id, Pos { x: 1.0, y: 2.0 }).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert_eq!(attrs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_add_duplicate_component_is_noop() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert_eq!(attrs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_set_updates_existing_component_value() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Score(10)).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.set(id, Score(99)).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs: HashSet<u64> = storage.get_entity_attrs(id).into_iter().collect();
+        let arch_id = Registry::compute_archetype_id(&attrs);
+        let key = KeyEncoder::encode(arch_id, crate::hash_name("Score"), id);
+        let data = storage.get(&key).unwrap();
+        let score: Score = postcard::from_bytes(&data).unwrap();
+        assert_eq!(score.0, 99);
+    }
+
+    #[tokio::test]
+    async fn test_set_adds_new_component_when_missing() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.set(id, Score(42)).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert_eq!(attrs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_remove_component() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.add(id, Score(5)).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.remove::<Tag>(id).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert_eq!(attrs.len(), 1);
+        assert!(!attrs.contains(&crate::hash_name("Tag")));
+    }
+
+    #[tokio::test]
+    async fn test_remove_last_component_clears_entity() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.remove::<Tag>(id).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert!(attrs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_remove_nonexistent_component_is_noop() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.remove::<Health>(id).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert_eq!(attrs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_destroy_entity_removes_all_components() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.add(id, Score(7)).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.destroy(id).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert!(attrs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_destroy_nonexistent_entity_is_noop() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        tx.destroy(999).await.unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_commit_populates_in_memory_cache() {
+        let storage = test_storage();
+        let registry = Arc::new(Mutex::new(Registry::default()));
+        let mut tx = Tx::new(storage.clone(), Some(registry.clone()));
+        let id = tx.spawn().await;
+        tx.add(id, Pos { x: 3.0, y: 4.0 }).await.unwrap();
+        tx.add(id, Health(100)).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let reg = registry.lock().unwrap();
+        let arch_id = reg.entity_archetype_id(id);
+        assert!(arch_id.is_some(), "cache should have archetype for entity");
+        let data = reg.read_component(id, crate::hash_name("Health"));
+        assert!(data.is_some(), "cache should have Health data");
+    }
+
+    #[tokio::test]
+    async fn test_commit_without_cache_does_not_panic() {
+        let mut tx = test_tx_no_cache();
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_multiple_entities_in_single_transaction() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let a = tx.spawn().await;
+        let b = tx.spawn().await;
+        tx.add(a, Tag).await.unwrap();
+        tx.add(b, Score(1)).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let attrs_a = storage.get_entity_attrs(a);
+        let attrs_b = storage.get_entity_attrs(b);
+        assert_eq!(attrs_a.len(), 1);
+        assert!(attrs_a.contains(&crate::hash_name("Tag")));
+        assert_eq!(attrs_b.len(), 1);
+        assert!(attrs_b.contains(&crate::hash_name("Score")));
+    }
+
+    #[tokio::test]
+    async fn test_add_after_remove_in_same_transaction() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.add(id, Score(5)).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.remove::<Tag>(id).await.unwrap();
+        tx2.add(id, Health(10)).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert_eq!(attrs.len(), 2);
+        assert!(!attrs.contains(&crate::hash_name("Tag")));
+        assert!(attrs.contains(&crate::hash_name("Health")));
+    }
+
+    #[tokio::test]
+    async fn test_archetype_migration_on_add_through_tx() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let attrs_1: HashSet<u64> = storage.get_entity_attrs(id).into_iter().collect();
+        let arch_1 = Registry::compute_archetype_id(&attrs_1);
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.add(id, Score(10)).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs_2: HashSet<u64> = storage.get_entity_attrs(id).into_iter().collect();
+        let arch_2 = Registry::compute_archetype_id(&attrs_2);
+        assert_ne!(arch_1, arch_2, "adding a component should change archetype");
+    }
+
+    #[tokio::test]
+    async fn test_archetype_migration_on_remove_through_tx() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.add(id, Score(10)).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let attrs_1: HashSet<u64> = storage.get_entity_attrs(id).into_iter().collect();
+        let arch_1 = Registry::compute_archetype_id(&attrs_1);
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.remove::<Tag>(id).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs_2: HashSet<u64> = storage.get_entity_attrs(id).into_iter().collect();
+        let arch_2 = Registry::compute_archetype_id(&attrs_2);
+        assert_ne!(arch_1, arch_2, "removing a component should change archetype");
+    }
+
+    #[tokio::test]
+    async fn test_set_on_fresh_entity_creates_component() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.set(id, Score(100)).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert_eq!(attrs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_destroy_twice_is_noop() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.destroy(id).await.unwrap();
+        tx2.destroy(id).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs = storage.get_entity_attrs(id);
+        assert!(attrs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_spawn_with_no_cache_still_works() {
+        let tx = Tx::new(test_storage(), None);
+        let id = tx.spawn().await;
+        assert!(id > 0);
+    }
+
+    #[tokio::test]
+    async fn test_add_component_preserves_existing_data_across_migration() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Pos { x: 1.0, y: 2.0 }).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.add(id, Tag).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let attrs: HashSet<u64> = storage.get_entity_attrs(id).into_iter().collect();
+        let arch_id = Registry::compute_archetype_id(&attrs);
+        let key = KeyEncoder::encode(arch_id, crate::hash_name("Pos"), id);
+        let data = storage.get(&key).unwrap();
+        let pos: Pos = postcard::from_bytes(&data).unwrap();
+        assert!((pos.x - 1.0).abs() < 1e-9);
+        assert!((pos.y - 2.0).abs() < 1e-9);
+    }
+
+    #[tokio::test]
+    async fn test_reverse_index_updated_on_add() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let entities = storage.get_entities_with_attr(crate::hash_name("Tag"));
+        assert!(entities.contains(&id));
+    }
+
+    #[tokio::test]
+    async fn test_reverse_index_updated_on_remove() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.remove::<Tag>(id).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let entities = storage.get_entities_with_attr(crate::hash_name("Tag"));
+        assert!(!entities.contains(&id));
+    }
+
+    #[tokio::test]
+    async fn test_reverse_index_updated_on_destroy() {
+        let storage = test_storage();
+        let mut tx = Tx::new(storage.clone(), None);
+        let id = tx.spawn().await;
+        tx.add(id, Tag).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx2 = Tx::new(storage.clone(), None);
+        tx2.destroy(id).await.unwrap();
+        tx2.commit().await.unwrap();
+
+        let entities = storage.get_entities_with_attr(crate::hash_name("Tag"));
+        assert!(!entities.contains(&id));
+    }
+}
