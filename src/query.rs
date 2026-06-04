@@ -1,9 +1,11 @@
+use crate::archetype::Registry;
 use crate::storage::{KeyEncoder, Storage};
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct Query<T> {
     storage: Arc<Storage>,
+    registry: Option<Arc<Mutex<Registry>>>,
     output_attr_hash: u64,
     with_components: Vec<u64>,
     without_components: Vec<u64>,
@@ -18,11 +20,17 @@ where
         let output_attr_hash = crate::hash_name(<T as crate::Attribute>::NAME);
         Self {
             storage,
+            registry: None,
             output_attr_hash,
             with_components: Vec::new(),
             without_components: Vec::new(),
             filter_fn: None,
         }
+    }
+
+    pub fn with_registry(mut self, registry: Option<Arc<Mutex<Registry>>>) -> Self {
+        self.registry = registry;
+        self
     }
 
     pub fn with<U: crate::Attribute + Send + 'static>(mut self) -> Self {
@@ -43,6 +51,42 @@ where
     }
 
     pub async fn run(self) -> Vec<T> {
+        // Archetype-aware path: use in-memory registry for dense, cache-friendly iteration.
+        // Only active when the cache is warm (has at least one archetype).
+        if let Some(registry) = &self.registry {
+            let registry = registry.lock().unwrap();
+            if registry.archetype_count() > 0 {
+                let matching_arch_ids = registry.find_matching_archetypes(
+                    self.output_attr_hash,
+                    &self.with_components,
+                    &self.without_components,
+                );
+
+                if matching_arch_ids.is_empty() {
+                    return Vec::new();
+                }
+
+                let filter_fn = &self.filter_fn;
+                let mut results = Vec::new();
+
+                for &arch_id in &matching_arch_ids {
+                    if let Some(archetype) = registry.get_archetype(arch_id) {
+                        for data in archetype.iter_component(self.output_attr_hash) {
+                            if let Ok(item) = postcard::from_bytes::<T>(data) {
+                                if filter_fn.as_ref().map_or(true, |f| f(&item)) {
+                                    results.push(item);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return results;
+            }
+            // Cold cache — fall through to RocksDB
+        }
+
+        // ── RocksDB path (original) ─────────────────────────────────
         let filter_fn = self.filter_fn;
 
         let mut candidates: HashSet<u128> = self

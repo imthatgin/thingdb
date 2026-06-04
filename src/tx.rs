@@ -1,11 +1,13 @@
+use crate::archetype::Registry;
 use crate::storage::{KeyEncoder, Storage};
 use rust_rocksdb::WriteBatch;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct Tx {
     storage: Arc<Storage>,
+    cache: Option<Arc<Mutex<Registry>>>,
     puts: Vec<(Vec<u8>, Vec<u8>)>,
     deletes: Vec<Vec<u8>>,
     pending_attrs: HashMap<u128, HashSet<u64>>,
@@ -13,9 +15,10 @@ pub struct Tx {
 }
 
 impl Tx {
-    pub fn new(storage: Arc<Storage>) -> Self {
+    pub fn new(storage: Arc<Storage>, cache: Option<Arc<Mutex<Registry>>>) -> Self {
         Self {
             storage,
+            cache,
             puts: Vec::new(),
             deletes: Vec::new(),
             pending_attrs: HashMap::new(),
@@ -30,11 +33,13 @@ impl Tx {
 
     // ── buffered read helpers ───────────────────────────────────────
 
-    fn get_entity_attrs(&self, thing: u128) -> HashSet<u64> {
+    fn get_entity_attrs(&mut self, thing: u128) -> HashSet<u64> {
         if let Some(attrs) = self.pending_attrs.get(&thing) {
             return attrs.clone();
         }
-        self.storage.get_entity_attrs(thing).into_iter().collect()
+        let attrs: HashSet<u64> = self.storage.get_entity_attrs(thing).into_iter().collect();
+        self.pending_attrs.insert(thing, attrs.clone());
+        attrs
     }
 
     fn read_data(&self, key: &[u8]) -> Option<Vec<u8>> {
@@ -104,7 +109,7 @@ impl Tx {
 
         let mut attrs = self.get_entity_attrs(thing);
         let old_archetype = if !attrs.is_empty() {
-            Some(compute_archetype_id(&attrs))
+            Some(Registry::compute_archetype_id(&attrs))
         } else {
             None
         };
@@ -113,7 +118,7 @@ impl Tx {
             return Ok(());
         }
 
-        let new_archetype = compute_archetype_id(&attrs);
+        let new_archetype = Registry::compute_archetype_id(&attrs);
 
         // Migrate existing data from old archetype to new archetype
         if let Some(old_arch) = old_archetype {
@@ -152,20 +157,20 @@ impl Tx {
 
         if attrs.contains(&hash) {
             // Overwrite in-place (same archetype)
-            let archetype_id = compute_archetype_id(&attrs);
+            let archetype_id = Registry::compute_archetype_id(&attrs);
             let key = KeyEncoder::encode(archetype_id, hash, thing);
             let bytes = postcard::to_allocvec(&attr)?;
             self.buf_put(key, bytes);
         } else {
             // New component — full add logic
             let old_archetype = if !attrs.is_empty() {
-                Some(compute_archetype_id(&attrs))
+                Some(Registry::compute_archetype_id(&attrs))
             } else {
                 None
             };
             let new_attrs: HashSet<u64> =
                 attrs.iter().copied().chain(std::iter::once(hash)).collect();
-            let new_archetype = compute_archetype_id(&new_attrs);
+            let new_archetype = Registry::compute_archetype_id(&new_attrs);
 
             if let Some(old_arch) = old_archetype {
                 for &old_hash in &attrs {
@@ -200,7 +205,7 @@ impl Tx {
         }
 
         let old_archetype =
-            compute_archetype_id(&attrs.iter().copied().chain(std::iter::once(hash)).collect());
+            Registry::compute_archetype_id(&attrs.iter().copied().chain(std::iter::once(hash)).collect());
 
         // Delete old data key
         self.buf_delete(KeyEncoder::encode(old_archetype, hash, thing));
@@ -212,7 +217,7 @@ impl Tx {
         if attrs.is_empty() {
             self.buf_delete_archetype(thing);
         } else {
-            let new_archetype = compute_archetype_id(&attrs);
+            let new_archetype = Registry::compute_archetype_id(&attrs);
             for &remaining_hash in &attrs {
                 let old_key = KeyEncoder::encode(old_archetype, remaining_hash, thing);
                 if let Some(data) = self.read_data(&old_key) {
@@ -233,7 +238,7 @@ impl Tx {
         }
 
         let attr_set: HashSet<u64> = attrs.into_iter().collect();
-        let archetype_id = compute_archetype_id(&attr_set);
+        let archetype_id = Registry::compute_archetype_id(&attr_set);
 
         for &hash in &attr_set {
             self.buf_delete(KeyEncoder::encode(archetype_id, hash, thing));
@@ -259,20 +264,33 @@ impl Tx {
         }
 
         self.storage.write_batch(&batch)?;
+
+        // ── populate in-memory archetype cache ──────────────────────
+        if let Some(cache) = &self.cache {
+            let mut registry = cache.lock().unwrap();
+
+            for (&thing_id, attrs) in &self.pending_attrs {
+                if attrs.is_empty() {
+                    registry.remove_entity(thing_id);
+                    continue;
+                }
+
+                let arch_id = Registry::compute_archetype_id(attrs);
+                let mut components: HashMap<u64, Vec<u8>> = HashMap::new();
+
+                for &attr_hash in attrs {
+                    let data_key = KeyEncoder::encode(arch_id, attr_hash, thing_id);
+                    if let Some(Some(data)) = self.pending_data.get(&data_key) {
+                        components.insert(attr_hash, data.clone());
+                    } else if let Some(data) = registry.read_component(thing_id, attr_hash) {
+                        components.insert(attr_hash, data.clone());
+                    }
+                }
+
+                registry.set_entity_components(thing_id, components);
+            }
+        }
+
         Ok(())
     }
-}
-
-fn compute_archetype_id(attrs: &HashSet<u64>) -> u64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let mut sorted: Vec<u64> = attrs.iter().cloned().collect();
-    sorted.sort();
-
-    let mut hasher = DefaultHasher::new();
-    for &h in &sorted {
-        h.hash(&mut hasher);
-    }
-    hasher.finish()
 }
