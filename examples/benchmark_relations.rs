@@ -1,34 +1,20 @@
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-use thingdb::edge::*;
 use thingdb::world::World;
-use thingdb::*;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, thingdb::Attribute)]
 struct Metadata {
     value: u64,
 }
 
-impl Attribute for Metadata {
-    const NAME: &'static str = "metadata";
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, thingdb::Edge)]
 struct Connected;
 
-impl Edge for Connected {
-    const NAME: &'static str = "connected";
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, thingdb::Edge)]
 struct Linked;
-
-impl Edge for Linked {
-    const NAME: &'static str = "linked";
-}
 
 fn print_separator(label: &str, elapsed: std::time::Duration, count: usize) {
     let per_sec = if elapsed.as_secs_f64() > 0.0 {

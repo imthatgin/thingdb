@@ -2,51 +2,27 @@ use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use thingdb::World;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Player;
 
-impl thingdb::Attribute for Player {
-    const NAME: &'static str = "Player";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Enemy;
 
-impl thingdb::Attribute for Enemy {
-    const NAME: &'static str = "Enemy";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Position {
     x: f64,
     y: f64,
     z: f64,
 }
 
-impl thingdb::Attribute for Position {
-    const NAME: &'static str = "Position";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Health(u32);
 
-impl thingdb::Attribute for Health {
-    const NAME: &'static str = "Health";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Damage(u16);
 
-impl thingdb::Attribute for Damage {
-    const NAME: &'static str = "Damage";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct VipStatus;
-
-impl thingdb::Attribute for VipStatus {
-    const NAME: &'static str = "VipStatus";
-}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total: u64 = 5_000_000;

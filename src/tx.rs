@@ -95,13 +95,13 @@ impl Tx {
         self.deletes.push(key);
     }
 
-    pub async fn relate<E: crate::Edge>(
+    pub async fn relate<E: crate::edge::Edge>(
         &mut self,
         from: u128,
         to: u128,
         data: E,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let hash = crate::hash_name(<E as crate::Edge>::NAME);
+        let hash = crate::hash_name(<E as crate::edge::Edge>::NAME);
         let fwd_key = Storage::edge_key(hash, from, to);
         let rev_key = Storage::reverse_edge_key(hash, to, from);
         let bytes = postcard::to_allocvec(&data)?;
@@ -110,12 +110,12 @@ impl Tx {
         Ok(())
     }
 
-    pub async fn unrelate<E: crate::Edge>(
+    pub async fn unrelate<E: crate::edge::Edge>(
         &mut self,
         from: u128,
         to: u128,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let hash = crate::hash_name(<E as crate::Edge>::NAME);
+        let hash = crate::hash_name(<E as crate::edge::Edge>::NAME);
         let fwd_key = Storage::edge_key(hash, from, to);
         let rev_key = Storage::reverse_edge_key(hash, to, from);
         self.buf_delete(fwd_key);
@@ -123,11 +123,11 @@ impl Tx {
         Ok(())
     }
 
-    pub async fn unrelate_all_from<E: crate::Edge>(
+    pub async fn unrelate_all_from<E: crate::edge::Edge>(
         &mut self,
         from: u128,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let hash = crate::hash_name(<E as crate::Edge>::NAME);
+        let hash = crate::hash_name(<E as crate::edge::Edge>::NAME);
         let prefix = Storage::outgoing_edge_prefix(hash, from);
         let mut keys_to_delete = Vec::new();
         self.storage.for_each_with_prefix(&prefix, |key, _value| {
@@ -143,12 +143,12 @@ impl Tx {
         Ok(())
     }
 
-    pub async fn add<T: crate::Attribute + 'static>(
+    pub async fn add<T: crate::attribute::Attribute + 'static>(
         &mut self,
         thing: u128,
         attr: T,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let hash = crate::hash_name(<T as crate::Attribute>::NAME);
+        let hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
 
         let mut attrs = self.get_entity_attrs(thing);
         let old_archetype = if !attrs.is_empty() {
@@ -190,12 +190,12 @@ impl Tx {
         Ok(())
     }
 
-    pub async fn set<T: crate::Attribute + 'static>(
+    pub async fn set<T: crate::attribute::Attribute + 'static>(
         &mut self,
         thing: u128,
         attr: T,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let hash = crate::hash_name(<T as crate::Attribute>::NAME);
+        let hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
         let attrs = self.get_entity_attrs(thing);
 
         if attrs.contains(&hash) {
@@ -236,11 +236,11 @@ impl Tx {
         Ok(())
     }
 
-    pub async fn remove<T: crate::Attribute + 'static>(
+    pub async fn remove<T: crate::attribute::Attribute + 'static>(
         &mut self,
         thing: u128,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let hash = crate::hash_name(<T as crate::Attribute>::NAME);
+        let hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
 
         let mut attrs = self.get_entity_attrs(thing);
         if !attrs.remove(&hash) {
@@ -334,7 +334,7 @@ impl Tx {
 mod tests {
     use super::*;
     use crate::archetype::Registry;
-    use crate::Attribute;
+    use crate::attribute::Attribute;
     use serde::{Deserialize, Serialize};
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -354,7 +354,7 @@ mod tests {
     #[derive(Serialize, Deserialize)]
     struct Tag;
 
-    impl Attribute for Tag {
+    impl crate::attribute::Attribute for Tag {
         const NAME: &'static str = "Tag";
     }
 
@@ -364,21 +364,21 @@ mod tests {
         y: f64,
     }
 
-    impl Attribute for Pos {
+    impl crate::attribute::Attribute for Pos {
         const NAME: &'static str = "Pos";
     }
 
     #[derive(Serialize, Deserialize)]
     struct Health(u32);
 
-    impl Attribute for Health {
+    impl crate::attribute::Attribute for Health {
         const NAME: &'static str = "Health";
     }
 
     #[derive(Serialize, Deserialize)]
     struct Score(i64);
 
-    impl Attribute for Score {
+    impl crate::attribute::Attribute for Score {
         const NAME: &'static str = "Score";
     }
 

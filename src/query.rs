@@ -12,12 +12,12 @@ pub struct Query<T> {
     filter_fn: Option<Box<dyn Fn(&T) -> bool + Send + Sync>>,
 }
 
-impl<T: crate::Attribute> Query<T>
+impl<T: crate::attribute::Attribute> Query<T>
 where
     T: for<'de> serde::Deserialize<'de> + Send + 'static,
 {
     pub fn new(storage: Arc<Storage>) -> Self {
-        let output_attr_hash = crate::hash_name(<T as crate::Attribute>::NAME);
+        let output_attr_hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
         Self {
             storage,
             registry: None,
@@ -33,14 +33,14 @@ where
         self
     }
 
-    pub fn with<U: crate::Attribute + Send + 'static>(mut self) -> Self {
-        let hash = crate::hash_name(<U as crate::Attribute>::NAME);
+    pub fn with<U: crate::attribute::Attribute + Send + 'static>(mut self) -> Self {
+        let hash = crate::hash_name(<U as crate::attribute::Attribute>::NAME);
         self.with_components.push(hash);
         self
     }
 
-    pub fn without<U: crate::Attribute + Send + 'static>(mut self) -> Self {
-        let hash = crate::hash_name(<U as crate::Attribute>::NAME);
+    pub fn without<U: crate::attribute::Attribute + Send + 'static>(mut self) -> Self {
+        let hash = crate::hash_name(<U as crate::attribute::Attribute>::NAME);
         self.without_components.push(hash);
         self
     }
@@ -256,14 +256,14 @@ mod tests {
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     struct Player;
 
-    impl Attribute for Player {
+    impl crate::attribute::Attribute for Player {
         const NAME: &'static str = "Player";
     }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     struct Enemy;
 
-    impl Attribute for Enemy {
+    impl crate::attribute::Attribute for Enemy {
         const NAME: &'static str = "Enemy";
     }
 
@@ -273,21 +273,21 @@ mod tests {
         y: f64,
     }
 
-    impl Attribute for Position {
+    impl crate::attribute::Attribute for Position {
         const NAME: &'static str = "Position";
     }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     struct Health(u32);
 
-    impl Attribute for Health {
+    impl crate::attribute::Attribute for Health {
         const NAME: &'static str = "Health";
     }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     struct Score(i64);
 
-    impl Attribute for Score {
+    impl crate::attribute::Attribute for Score {
         const NAME: &'static str = "Score";
     }
 

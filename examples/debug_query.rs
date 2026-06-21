@@ -1,12 +1,8 @@
 use serde::{Deserialize, Serialize};
 use thingdb::{hash_name, World};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Player;
-
-impl thingdb::Attribute for Player {
-    const NAME: &'static str = "Player";
-}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = std::fs::remove_dir_all("/tmp/debug_query_db");
@@ -28,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tx.commit().await.unwrap();
 
         // Check what hash was computed for Player
-        let player_attr_hash = hash_name(<Player as thingdb::Attribute>::NAME);
+        let player_attr_hash = hash_name(<Player as thingdb::attribute::Attribute>::NAME);
         println!("Computed Player attr hash via trait: {}", player_attr_hash);
 
         // Query

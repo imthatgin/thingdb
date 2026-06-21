@@ -29,17 +29,19 @@ impl World {
         Tx::new(self.storage.clone(), Some(self.registry.clone()))
     }
 
-    pub fn query<T: crate::Attribute + for<'de> serde::Deserialize<'de> + Send + 'static>(
+    pub fn query<
+        T: crate::attribute::Attribute + for<'de> serde::Deserialize<'de> + Send + 'static,
+    >(
         &self,
     ) -> Query<T> {
         Query::new(self.storage.clone()).with_registry(Some(self.registry.clone()))
     }
 
-    pub fn outgoing_edges<E: crate::Edge>(&self, thing: u128) -> Vec<(u128, E)> {
+    pub fn outgoing_edges<E: crate::edge::Edge>(&self, thing: u128) -> Vec<(u128, E)> {
         edge::outgoing_edges(&self.storage, thing)
     }
 
-    pub fn incoming_edges<E: crate::Edge>(&self, thing: u128) -> Vec<(u128, E)> {
+    pub fn incoming_edges<E: crate::edge::Edge>(&self, thing: u128) -> Vec<(u128, E)> {
         edge::incoming_edges(&self.storage, thing)
     }
 
@@ -49,8 +51,8 @@ impl World {
 
     /// Fetch a single entity's component data by entity ID.
     /// Returns `None` if the entity doesn't have this component.
-    pub fn get_component<T: crate::Attribute>(&self, thing: u128) -> Option<T> {
-        let hash = crate::hash_name(<T as crate::Attribute>::NAME);
+    pub fn get_component<T: crate::attribute::Attribute>(&self, thing: u128) -> Option<T> {
+        let hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
         let arch_id = self.storage.get_entity_archetype(thing)?;
         let key = KeyEncoder::encode(arch_id, hash, thing);
         let data = self.storage.get(&key)?;
@@ -60,7 +62,7 @@ impl World {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Attribute, World};
+    use crate::World;
     use serde::{Deserialize, Serialize};
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -76,7 +78,7 @@ mod tests {
     #[derive(Serialize, Deserialize)]
     struct Marker;
 
-    impl Attribute for Marker {
+    impl crate::attribute::Attribute for Marker {
         const NAME: &'static str = "Marker";
     }
 

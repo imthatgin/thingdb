@@ -1,45 +1,25 @@
 use serde::{Deserialize, Serialize};
 use thingdb::World;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Player;
 
-impl thingdb::Attribute for Player {
-    const NAME: &'static str = "Player";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct SteamId(u64);
 
-impl thingdb::Attribute for SteamId {
-    const NAME: &'static str = "SteamId";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Nickname(String);
 
-impl thingdb::Attribute for Nickname {
-    const NAME: &'static str = "Nickname";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Position {
     x: i128,
     y: i128,
 }
 
-impl thingdb::Attribute for Position {
-    const NAME: &'static str = "Position";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Health {
     value: u64,
     max: u64,
-}
-
-impl thingdb::Attribute for Health {
-    const NAME: &'static str = "Health";
 }
 
 #[tokio::test]
@@ -79,7 +59,7 @@ async fn test_full_api() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Verify the proc-macro derive works correctly.
-#[derive(serde::Serialize, serde::Deserialize, thingdb::thingdb_attribute)]
+#[derive(serde::Serialize, serde::Deserialize, thingdb::Attribute)]
 #[allow(dead_code)]
 struct DerivedPlayer {
     name: String,

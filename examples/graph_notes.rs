@@ -2,73 +2,40 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use thingdb::edge::*;
 use thingdb::world::World;
-use thingdb::*;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, thingdb::Attribute)]
 struct Note {
     title: String,
 }
 
-impl Attribute for Note {
-    const NAME: &'static str = "note";
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, thingdb::Attribute)]
 struct Folder {
     name: String,
 }
 
-impl Attribute for Folder {
-    const NAME: &'static str = "folder";
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, thingdb::Attribute)]
 struct Person {
     name: String,
 }
 
-impl Attribute for Person {
-    const NAME: &'static str = "person";
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, thingdb::Attribute)]
 struct Tag {
     label: String,
 }
 
-impl Attribute for Tag {
-    const NAME: &'static str = "tag";
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, thingdb::Edge)]
 struct Contains;
 
-impl Edge for Contains {
-    const NAME: &'static str = "contains";
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, thingdb::Edge)]
 struct Authored;
 
-impl Edge for Authored {
-    const NAME: &'static str = "authored";
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, thingdb::Edge)]
 struct Tagged;
 
-impl Edge for Tagged {
-    const NAME: &'static str = "tagged";
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, thingdb::Edge)]
 struct Related;
-
-impl Edge for Related {
-    const NAME: &'static str = "related";
-}
 
 #[tokio::main]
 async fn main() {

@@ -1,36 +1,20 @@
 use serde::{Deserialize, Serialize};
 use thingdb::World;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Player;
 
-impl thingdb::Attribute for Player {
-    const NAME: &'static str = "Player";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Enemy;
 
-impl thingdb::Attribute for Enemy {
-    const NAME: &'static str = "Enemy";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Position {
     x: f64,
     y: f64,
 }
 
-impl thingdb::Attribute for Position {
-    const NAME: &'static str = "Position";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Health(u32);
-
-impl thingdb::Attribute for Health {
-    const NAME: &'static str = "Health";
-}
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -660,25 +644,17 @@ async fn test_large_scale_archetype_migration() {
     assert_eq!(players_with_health.len(), 30);
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Inventory {
     items: Vec<String>,
     gold: u64,
 }
 
-impl thingdb::Attribute for Inventory {
-    const NAME: &'static str = "Inventory";
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, thingdb::Attribute)]
 struct Buff {
     name: String,
     duration: Option<f64>,
     stacks: u32,
-}
-
-impl thingdb::Attribute for Buff {
-    const NAME: &'static str = "Buff";
 }
 
 #[tokio::test]
