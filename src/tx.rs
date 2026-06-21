@@ -143,13 +143,12 @@ impl Tx {
         Ok(())
     }
 
-    pub async fn add<T: crate::attribute::Attribute + 'static>(
+    pub fn write_attr(
         &mut self,
         thing: u128,
-        attr: T,
+        hash: u64,
+        data: Vec<u8>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
-
         let mut attrs = self.get_entity_attrs(thing);
         let old_archetype = if !attrs.is_empty() {
             Some(Registry::compute_archetype_id(&attrs))
@@ -172,22 +171,40 @@ impl Tx {
                 .collect::<Vec<u64>>()
             {
                 let old_key = KeyEncoder::encode(old_arch, old_hash, thing);
-                if let Some(data) = self.read_data(&old_key) {
+                if let Some(existing) = self.read_data(&old_key) {
                     let new_key = KeyEncoder::encode(new_archetype, old_hash, thing);
-                    self.buf_put(new_key, data);
+                    self.buf_put(new_key, existing);
                 }
             }
         }
 
         // Store new attribute data
         let key = KeyEncoder::encode(new_archetype, hash, thing);
-        let bytes = postcard::to_allocvec(&attr)?;
-        self.buf_put(key, bytes);
+        self.buf_put(key, data);
         self.buf_set_archetype(thing, new_archetype);
         self.buf_add_attr(thing, hash);
         self.buf_add_reverse_index(thing, hash);
 
         Ok(())
+    }
+
+    pub async fn add<T: crate::attribute::Attribute + 'static>(
+        &mut self,
+        thing: u128,
+        attr: T,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
+        let bytes = postcard::to_allocvec(&attr)?;
+        self.write_attr(thing, hash, bytes)
+    }
+
+    pub async fn spawn_with<B: crate::blueprint::Blueprint>(
+        &mut self,
+        blueprint: B,
+    ) -> Result<u128, Box<dyn std::error::Error>> {
+        let entity = self.spawn().await;
+        crate::blueprint::Blueprint::apply(blueprint, self, entity)?;
+        Ok(entity)
     }
 
     pub async fn set<T: crate::attribute::Attribute + 'static>(
@@ -334,7 +351,6 @@ impl Tx {
 mod tests {
     use super::*;
     use crate::archetype::Registry;
-    use crate::attribute::Attribute;
     use serde::{Deserialize, Serialize};
     use std::sync::atomic::{AtomicU64, Ordering};
 
