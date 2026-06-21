@@ -1,5 +1,5 @@
-use thingdb::World;
 use serde::{Deserialize, Serialize};
+use thingdb::World;
 
 #[derive(Serialize, Deserialize)]
 struct Player;
@@ -46,12 +46,12 @@ fn get_test_world() -> World {
 #[tokio::test]
 async fn test_spawn_returns_incrementing_ids() {
     let world = get_test_world();
-    
+
     let tx = world.tx().await;
     let id1 = tx.spawn().await;
     let id2 = tx.spawn().await;
     let id3 = tx.spawn().await;
-    
+
     assert!(id2 > id1);
     assert!(id3 > id2);
 }
@@ -59,13 +59,13 @@ async fn test_spawn_returns_incrementing_ids() {
 #[tokio::test]
 async fn test_add_single_attribute() {
     let world = get_test_world();
-    
+
     let mut tx = world.tx().await;
     let thing_id = tx.spawn().await;
-    
+
     tx.add(thing_id, Player).await.unwrap();
     tx.commit().await.unwrap();
-    
+
     // Query should find the player
     let results: Vec<Player> = world.query::<Player>().run().await;
     assert_eq!(results.len(), 1);
@@ -74,20 +74,19 @@ async fn test_add_single_attribute() {
 #[tokio::test]
 async fn test_add_multiple_attributes_same_entity() {
     let world = get_test_world();
-    
+
     let mut tx = world.tx().await;
     let thing_id = tx.spawn().await;
-    
+
     tx.add(thing_id, Player).await.unwrap();
-    tx.add(thing_id, Position { x: 10.0, y: 20.0 }).await.unwrap();
+    tx.add(thing_id, Position { x: 10.0, y: 20.0 })
+        .await
+        .unwrap();
     tx.commit().await.unwrap();
-    
+
     // Query Players with Position
-    let results: Vec<Position> = world.query::<Position>()
-        .with::<Player>()
-        .run()
-        .await;
-    
+    let results: Vec<Position> = world.query::<Position>().with::<Player>().run().await;
+
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].x, 10.0);
 }
@@ -95,21 +94,21 @@ async fn test_add_multiple_attributes_same_entity() {
 #[tokio::test]
 async fn test_query_with_single_component() {
     let world = get_test_world();
-    
+
     // Add some entities
     let mut tx = world.tx().await;
-    
+
     let p1 = tx.spawn().await;
     tx.add(p1, Player).await.unwrap();
-    
+
     let e1 = tx.spawn().await;
     tx.add(e1, Enemy).await.unwrap();
-    
+
     let p2 = tx.spawn().await;
     tx.add(p2, Player).await.unwrap();
-    
+
     tx.commit().await.unwrap();
-    
+
     // Query all Players
     let results: Vec<Player> = world.query::<Player>().run().await;
     assert_eq!(results.len(), 2);
@@ -118,31 +117,28 @@ async fn test_query_with_single_component() {
 #[tokio::test]
 async fn test_query_with_multiple_with() {
     let world = get_test_world();
-    
+
     let mut tx = world.tx().await;
-    
+
     // Player with Position
     let p1 = tx.spawn().await;
     tx.add(p1, Player).await.unwrap();
     tx.add(p1, Position { x: 1.0, y: 2.0 }).await.unwrap();
-    
-    // Enemy with Position  
+
+    // Enemy with Position
     let e1 = tx.spawn().await;
     tx.add(e1, Enemy).await.unwrap();
     tx.add(e1, Position { x: 3.0, y: 4.0 }).await.unwrap();
-    
+
     // Player without Position (different archetype)
     let p2 = tx.spawn().await;
     tx.add(p2, Player).await.unwrap();
-    
+
     tx.commit().await.unwrap();
-    
+
     // Query Players with Position
-    let results: Vec<Position> = world.query::<Position>()
-        .with::<Player>()
-        .run()
-        .await;
-    
+    let results: Vec<Position> = world.query::<Position>().with::<Player>().run().await;
+
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].x, 1.0);
 }
@@ -150,106 +146,98 @@ async fn test_query_with_multiple_with() {
 #[tokio::test]
 async fn test_query_with_without() {
     let world = get_test_world();
-    
+
     let mut tx = world.tx().await;
-    
+
     // Player with Health
     let p1 = tx.spawn().await;
     tx.add(p1, Player).await.unwrap();
     tx.add(p1, Health(100)).await.unwrap();
-    
-    // Enemy with Health  
+
+    // Enemy with Health
     let e1 = tx.spawn().await;
     tx.add(e1, Enemy).await.unwrap();
     tx.add(e1, Health(50)).await.unwrap();
-    
+
     tx.commit().await.unwrap();
-    
+
     // Query Health that are NOT on Enemies
-    let results: Vec<Health> = world.query::<Health>()
-        .without::<Enemy>()
-        .run()
-        .await;
-    
+    let results: Vec<Health> = world.query::<Health>().without::<Enemy>().run().await;
+
     assert_eq!(results.len(), 1);
 }
 
 #[tokio::test]
 async fn test_query_with_filter() {
     let world = get_test_world();
-    
+
     let mut tx = world.tx().await;
-    
+
     // Players with different health values
     let p1 = tx.spawn().await;
     tx.add(p1, Player).await.unwrap();
     tx.add(p1, Health(50)).await.unwrap();
-    
+
     let p2 = tx.spawn().await;
     tx.add(p2, Player).await.unwrap();
     tx.add(p2, Health(150)).await.unwrap();
-    
+
     tx.commit().await.unwrap();
-    
+
     // Query Players with Health > 100
-    let results: Vec<Health> = world.query::<Health>()
+    let results: Vec<Health> = world
+        .query::<Health>()
         .with::<Player>()
         .filter(|h| h.0 > 100)
         .run()
         .await;
-    
+
     assert_eq!(results.len(), 1);
 }
 
 #[tokio::test]
 async fn test_complex_archetype_routing() {
     let world = get_test_world();
-    
+
     let mut tx = world.tx().await;
-    
+
     // Archetype 1: Player + Position (2 components)
     let p1 = tx.spawn().await;
     println!("p1 id: {}", p1);
     tx.add(p1, Player).await.unwrap();
     tx.add(p1, Position { x: 1.0, y: 2.0 }).await.unwrap();
-    
-    // Archetype 2: Enemy + Health (2 components)  
+
+    // Archetype 2: Enemy + Health (2 components)
     let e1 = tx.spawn().await;
     println!("e1 id: {}", e1);
     tx.add(e1, Enemy).await.unwrap();
     tx.add(e1, Health(75)).await.unwrap();
-    
+
     // Archetype 3: Player + Position + Health (3 components)
     let p2 = tx.spawn().await;
     println!("p2 id: {}", p2);
     tx.add(p2, Player).await.unwrap();
     tx.add(p2, Position { x: 3.0, y: 4.0 }).await.unwrap();
     tx.add(p2, Health(200)).await.unwrap();
-    
+
     tx.commit().await.unwrap();
-    
+
     // Query all Entities with Position
     let positions: Vec<Position> = world.query::<Position>().run().await;
     println!("Found {} positions", positions.len());
     assert_eq!(positions.len(), 2);
-    
+
     // Query Players (all have Player component)
-    let players: Vec<Player> = world.query::<Player>()
-        .with::<Player>()  
-        .run()
-        .await;
-    assert_eq!(players.len(), 2);  // p1 and p2
-    
+    let players: Vec<Player> = world.query::<Player>().with::<Player>().run().await;
+    assert_eq!(players.len(), 2); // p1 and p2
+
     // Query all Entities with Health
     let healths: Vec<Health> = world.query::<Health>().run().await;
     assert_eq!(healths.len(), 2);
-    
+
     // Query Player + Position (should find both archetypes)
-    let pos_with_player: Vec<Position> = world.query::<Position>()
-        .with::<Player>()
-        .run()
-        .await;
-    assert_eq!(pos_with_player.len(), 2);  // p1 and p2
+    let pos_with_player: Vec<Position> = world.query::<Position>().with::<Player>().run().await;
+    assert_eq!(pos_with_player.len(), 2); // p1 and p2
 }
 
 #[tokio::test]
@@ -431,7 +419,7 @@ async fn test_add_duplicate_component_is_noop() {
     let mut tx = world.tx().await;
     let id = tx.spawn().await;
     tx.add(id, Player).await.unwrap();
-    tx.add(id, Player).await.unwrap();  // same component again
+    tx.add(id, Player).await.unwrap(); // same component again
     tx.commit().await.unwrap();
 
     let players: Vec<Player> = world.query::<Player>().run().await;
@@ -447,7 +435,7 @@ async fn test_remove_nonexistent_component_is_noop() {
     tx.commit().await.unwrap();
 
     let mut tx2 = world.tx().await;
-    tx2.remove::<Health>(id).await.unwrap();  // entity has no Health
+    tx2.remove::<Health>(id).await.unwrap(); // entity has no Health
     tx2.commit().await.unwrap();
 
     let players: Vec<Player> = world.query::<Player>().run().await;
@@ -486,10 +474,7 @@ async fn test_filter_rejects_all() {
     tx.add(id, Health(50)).await.unwrap();
     tx.commit().await.unwrap();
 
-    let results: Vec<Health> = world.query::<Health>()
-        .filter(|h| h.0 > 100)
-        .run()
-        .await;
+    let results: Vec<Health> = world.query::<Health>().filter(|h| h.0 > 100).run().await;
     assert_eq!(results.len(), 0);
 }
 
@@ -501,8 +486,9 @@ async fn test_with_matches_nothing() {
     tx.add(id, Player).await.unwrap();
     tx.commit().await.unwrap();
 
-    let results: Vec<Player> = world.query::<Player>()
-        .with::<Health>()  // no entity has both
+    let results: Vec<Player> = world
+        .query::<Player>()
+        .with::<Health>() // no entity has both
         .run()
         .await;
     assert_eq!(results.len(), 0);
@@ -523,10 +509,7 @@ async fn test_without_standalone() {
     tx.commit().await.unwrap();
 
     // Player without Health
-    let results: Vec<Player> = world.query::<Player>()
-        .without::<Health>()
-        .run()
-        .await;
+    let results: Vec<Player> = world.query::<Player>().without::<Health>().run().await;
     assert_eq!(results.len(), 1);
 }
 
@@ -675,17 +658,11 @@ async fn test_large_scale_archetype_migration() {
     assert_eq!(health_200_count, 30);
 
     // Player without Health: ids[30..60] = 30
-    let players_no_health: Vec<Player> = world.query::<Player>()
-        .without::<Health>()
-        .run()
-        .await;
+    let players_no_health: Vec<Player> = world.query::<Player>().without::<Health>().run().await;
     assert_eq!(players_no_health.len(), 30);
 
     // Player with Health: ids[0..30] = 30
-    let players_with_health: Vec<Player> = world.query::<Player>()
-        .with::<Health>()
-        .run()
-        .await;
+    let players_with_health: Vec<Player> = world.query::<Player>().with::<Health>().run().await;
     assert_eq!(players_with_health.len(), 30);
 }
 
@@ -718,16 +695,26 @@ async fn test_component_with_complex_types() {
     let mut tx = world.tx().await;
 
     let id = tx.spawn().await;
-    tx.add(id, Inventory {
-        items: vec!["sword".into(), "shield".into()],
-        gold: 1000,
-    }).await.unwrap();
+    tx.add(
+        id,
+        Inventory {
+            items: vec!["sword".into(), "shield".into()],
+            gold: 1000,
+        },
+    )
+    .await
+    .unwrap();
 
-    tx.add(id, Buff {
-        name: "Strength".into(),
-        duration: Some(30.0),
-        stacks: 3,
-    }).await.unwrap();
+    tx.add(
+        id,
+        Buff {
+            name: "Strength".into(),
+            duration: Some(30.0),
+            stacks: 3,
+        },
+    )
+    .await
+    .unwrap();
 
     tx.commit().await.unwrap();
 

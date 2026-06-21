@@ -436,20 +436,14 @@ mod tests {
     #[tokio::test]
     async fn test_query_rocksdb_path_with_clause() {
         let (storage, _) = setup_data().await;
-        let results: Vec<Position> = Query::new(storage)
-            .with::<Player>()
-            .run()
-            .await;
+        let results: Vec<Position> = Query::new(storage).with::<Player>().run().await;
         assert_eq!(results.len(), 2);
     }
 
     #[tokio::test]
     async fn test_query_rocksdb_path_without_clause() {
         let (storage, _) = setup_data().await;
-        let results: Vec<Health> = Query::new(storage)
-            .without::<Enemy>()
-            .run()
-            .await;
+        let results: Vec<Health> = Query::new(storage).without::<Enemy>().run().await;
         assert_eq!(results.len(), 1);
     }
 
@@ -530,9 +524,7 @@ mod tests {
         }
         tx.commit().await.unwrap();
 
-        let results: Vec<Score> = Query::new(storage)
-            .run()
-            .await;
+        let results: Vec<Score> = Query::new(storage).run().await;
 
         assert_eq!(results.len(), 500);
 
@@ -577,10 +569,7 @@ mod tests {
         }
         tx.commit().await.unwrap();
 
-        let results: Vec<Score> = Query::new(storage)
-            .with::<Player>()
-            .run()
-            .await;
+        let results: Vec<Score> = Query::new(storage).with::<Player>().run().await;
 
         assert_eq!(results.len(), 250);
     }

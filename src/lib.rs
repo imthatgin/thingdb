@@ -1,14 +1,14 @@
 mod attribute;
 mod thing;
 
-pub mod storage;
 pub mod archetype;
-pub mod tx;
 pub mod query;
+pub mod storage;
+pub mod tx;
 pub mod world;
 
-pub use attribute::{Attribute, hash_name};
 pub use crate::storage::Storage;
+pub use attribute::{hash_name, Attribute};
 pub use thing::Thing;
-pub use world::World;
 pub use thingdb_derive::thingdb_attribute;
+pub use world::World;

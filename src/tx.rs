@@ -204,8 +204,9 @@ impl Tx {
             return Ok(());
         }
 
-        let old_archetype =
-            Registry::compute_archetype_id(&attrs.iter().copied().chain(std::iter::once(hash)).collect());
+        let old_archetype = Registry::compute_archetype_id(
+            &attrs.iter().copied().chain(std::iter::once(hash)).collect(),
+        );
 
         // Delete old data key
         self.buf_delete(KeyEncoder::encode(old_archetype, hash, thing));
@@ -608,7 +609,10 @@ mod tests {
 
         let attrs_2: HashSet<u64> = storage.get_entity_attrs(id).into_iter().collect();
         let arch_2 = Registry::compute_archetype_id(&attrs_2);
-        assert_ne!(arch_1, arch_2, "removing a component should change archetype");
+        assert_ne!(
+            arch_1, arch_2,
+            "removing a component should change archetype"
+        );
     }
 
     #[tokio::test]

@@ -196,7 +196,12 @@ impl Archetype {
         Some(slot)
     }
 
-    pub fn set_component(&mut self, thing_id: ThingId, attr_hash: u64, data: Vec<u8>) -> Option<()> {
+    pub fn set_component(
+        &mut self,
+        thing_id: ThingId,
+        attr_hash: u64,
+        data: Vec<u8>,
+    ) -> Option<()> {
         let slot = *self.entity_to_slot.get(&thing_id)?;
         let storage = self.components.get_mut(&attr_hash)?;
         storage.set(slot, data);
@@ -658,7 +663,17 @@ mod tests {
             reg.entity_archetype_id(1).unwrap(),
             reg.entity_archetype_id(2).unwrap()
         );
-        assert_eq!(reg.get_archetype(reg.entity_archetype_id(1).unwrap()).unwrap().entity_count(), 1);
-        assert_eq!(reg.get_archetype(reg.entity_archetype_id(2).unwrap()).unwrap().entity_count(), 1);
+        assert_eq!(
+            reg.get_archetype(reg.entity_archetype_id(1).unwrap())
+                .unwrap()
+                .entity_count(),
+            1
+        );
+        assert_eq!(
+            reg.get_archetype(reg.entity_archetype_id(2).unwrap())
+                .unwrap()
+                .entity_count(),
+            1
+        );
     }
 }
