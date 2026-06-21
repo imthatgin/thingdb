@@ -192,6 +192,52 @@ impl Storage {
         prefix.extend_from_slice(&thing_id.to_le_bytes());
         prefix
     }
+
+    pub(crate) fn edge_key(edge_hash: u64, src: u128, tgt: u128) -> Vec<u8> {
+        let mut key = b"ef:".to_vec();
+        key.extend_from_slice(&edge_hash.to_le_bytes());
+        key.extend_from_slice(&src.to_le_bytes());
+        key.extend_from_slice(&tgt.to_le_bytes());
+        key
+    }
+
+    pub(crate) fn reverse_edge_key(edge_hash: u64, tgt: u128, src: u128) -> Vec<u8> {
+        let mut key = b"er:".to_vec();
+        key.extend_from_slice(&edge_hash.to_le_bytes());
+        key.extend_from_slice(&tgt.to_le_bytes());
+        key.extend_from_slice(&src.to_le_bytes());
+        key
+    }
+
+    pub(crate) fn outgoing_edge_prefix(edge_hash: u64, src: u128) -> Vec<u8> {
+        let mut prefix = b"ef:".to_vec();
+        prefix.extend_from_slice(&edge_hash.to_le_bytes());
+        prefix.extend_from_slice(&src.to_le_bytes());
+        prefix
+    }
+
+    pub(crate) fn incoming_edge_prefix(edge_hash: u64, tgt: u128) -> Vec<u8> {
+        let mut prefix = b"er:".to_vec();
+        prefix.extend_from_slice(&edge_hash.to_le_bytes());
+        prefix.extend_from_slice(&tgt.to_le_bytes());
+        prefix
+    }
+
+    pub(crate) fn parse_edge_target(key: &[u8]) -> Option<u128> {
+        if key.len() < 43 || !key.starts_with(b"ef:") {
+            return None;
+        }
+        let bytes: [u8; 16] = key[27..43].try_into().ok()?;
+        Some(u128::from_le_bytes(bytes))
+    }
+
+    pub(crate) fn parse_reverse_edge_source(key: &[u8]) -> Option<u128> {
+        if key.len() < 43 || !key.starts_with(b"er:") {
+            return None;
+        }
+        let bytes: [u8; 16] = key[27..43].try_into().ok()?;
+        Some(u128::from_le_bytes(bytes))
+    }
 }
 
 pub struct KeyEncoder;
@@ -244,8 +290,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&path);
         Storage::open(&path).unwrap()
     }
-
-    // ── KeyEncoder ───────────────────────────────────────────────────
 
     #[test]
     fn test_key_encoding() {
@@ -303,8 +347,6 @@ mod tests {
         assert_eq!(u64::from_le_bytes(prefix[8..16].try_into().unwrap()), 13);
     }
 
-    // ── Entity attributes (get / add / remove) ───────────────────────
-
     #[tokio::test]
     async fn test_entity_attr_roundtrip() {
         let storage = test_storage();
@@ -350,8 +392,6 @@ mod tests {
         assert_eq!(attrs_2, vec![20]);
     }
 
-    // ── Entity-to-archetype mapping ──────────────────────────────────
-
     #[tokio::test]
     async fn test_entity_archetype_roundtrip() {
         let storage = test_storage();
@@ -371,8 +411,6 @@ mod tests {
         storage.set_entity_archetype(1, 200).await.unwrap();
         assert_eq!(storage.get_entity_archetype(1), Some(200));
     }
-
-    // ── Reverse index ────────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_reverse_index_roundtrip() {
@@ -424,8 +462,6 @@ mod tests {
         assert!(entities.is_empty());
     }
 
-    // ── Key format consistency ───────────────────────────────────────
-
     #[test]
     fn test_key_format_entity_to_archetype_key() {
         let key = Storage::entity_to_archetype_key(42);
@@ -446,8 +482,6 @@ mod tests {
         assert!(key.starts_with(b"ai:"));
         assert_eq!(key.len(), 3 + 8 + 16);
     }
-
-    // ── Storage put / get / delete ───────────────────────────────────
 
     #[tokio::test]
     async fn test_storage_put_get_delete() {

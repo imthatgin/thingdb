@@ -86,7 +86,6 @@ where
             // Cold cache — fall through to RocksDB
         }
 
-        // ── RocksDB path (original) ─────────────────────────────────
         let filter_fn = self.filter_fn;
 
         let mut candidates: HashSet<u128> = self
@@ -318,8 +317,6 @@ mod tests {
         (storage, registry)
     }
 
-    // ── Cache-path tests (registry has warm archetypes) ──────────────
-
     #[tokio::test]
     async fn test_query_cache_single_component() {
         let (storage, registry) = setup_data().await;
@@ -410,8 +407,6 @@ mod tests {
         assert!(results.is_empty());
     }
 
-    // ── RocksDB path (cold cache: registry with 0 archetypes) ────────
-
     #[tokio::test]
     async fn test_query_rocksdb_path_single_component() {
         let (storage, _) = setup_data().await;
@@ -482,8 +477,6 @@ mod tests {
         assert_eq!(results.len(), 1);
     }
 
-    // ── Data integrity across query paths ────────────────────────────
-
     #[tokio::test]
     async fn test_query_cache_and_rocksdb_return_same_results() {
         let storage = test_storage();
@@ -507,8 +500,6 @@ mod tests {
         assert_eq!(cache_results.len(), rocks_results.len());
         assert_eq!(cache_results[0].0, rocks_results[0].0);
     }
-
-    // ── Batched fetch path (n >= 500) ────────────────────────────────
 
     #[tokio::test]
     async fn test_query_batched_fetch_path() {
@@ -573,8 +564,6 @@ mod tests {
 
         assert_eq!(results.len(), 250);
     }
-
-    // ── Query builder chaining ───────────────────────────────────────
 
     #[tokio::test]
     async fn test_query_builder_chaining() {

@@ -31,8 +31,6 @@ impl Tx {
         NEXT_ID.fetch_add(1, Ordering::Relaxed) as u128
     }
 
-    // ── buffered read helpers ───────────────────────────────────────
-
     fn get_entity_attrs(&mut self, thing: u128) -> HashSet<u64> {
         if let Some(attrs) = self.pending_attrs.get(&thing) {
             return attrs.clone();
@@ -98,7 +96,53 @@ impl Tx {
         self.deletes.push(key);
     }
 
-    // ── public API ──────────────────────────────────────────────────
+    pub async fn relate<E: crate::Edge>(
+        &mut self,
+        from: u128,
+        to: u128,
+        data: E,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let hash = crate::hash_name(<E as crate::Edge>::NAME);
+        let fwd_key = Storage::edge_key(hash, from, to);
+        let rev_key = Storage::reverse_edge_key(hash, to, from);
+        let bytes = postcard::to_allocvec(&data)?;
+        self.buf_put(fwd_key, bytes.clone());
+        self.buf_put(rev_key, bytes);
+        Ok(())
+    }
+
+    pub async fn unrelate<E: crate::Edge>(
+        &mut self,
+        from: u128,
+        to: u128,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let hash = crate::hash_name(<E as crate::Edge>::NAME);
+        let fwd_key = Storage::edge_key(hash, from, to);
+        let rev_key = Storage::reverse_edge_key(hash, to, from);
+        self.buf_delete(fwd_key);
+        self.buf_delete(rev_key);
+        Ok(())
+    }
+
+    pub async fn unrelate_all_from<E: crate::Edge>(
+        &mut self,
+        from: u128,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let hash = crate::hash_name(<E as crate::Edge>::NAME);
+        let prefix = Storage::outgoing_edge_prefix(hash, from);
+        let mut keys_to_delete = Vec::new();
+        self.storage.for_each_with_prefix(&prefix, |key, _value| {
+            keys_to_delete.push(key.to_vec());
+        });
+        for fwd_key in &keys_to_delete {
+            if let Some(tgt) = Storage::parse_edge_target(fwd_key) {
+                let rev_key = Storage::reverse_edge_key(hash, tgt, from);
+                self.buf_delete(rev_key);
+            }
+            self.buf_delete(fwd_key.clone());
+        }
+        Ok(())
+    }
 
     pub async fn add<T: crate::Attribute + 'static>(
         &mut self,
@@ -256,7 +300,7 @@ impl Tx {
         let mut batch = WriteBatch::default();
 
         // Apply deletes before puts so that if a key is both deleted and re-put,
-        // the put wins (RocksDB applies ops in order within a batch).
+        // the put wins (RocksDB applies ops in order within a batch)
         for key in &self.deletes {
             batch.delete(key);
         }
@@ -266,7 +310,7 @@ impl Tx {
 
         self.storage.write_batch(&batch)?;
 
-        // ── populate in-memory archetype cache ──────────────────────
+        // In memory archetype cache
         if let Some(cache) = &self.cache {
             let mut registry = cache.lock().unwrap();
 

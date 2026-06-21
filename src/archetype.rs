@@ -275,8 +275,6 @@ impl ComponentStorage {
 mod tests {
     use super::*;
 
-    // ── Archetype basics ────────────────────────────────────────────
-
     #[test]
     fn test_archetype_spawn_and_entity_count() {
         let mut arch = Archetype::new();

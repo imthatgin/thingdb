@@ -1,6 +1,7 @@
 use crate::archetype::Registry;
+use crate::edge::{self, Traversal};
 use crate::query::Query;
-use crate::storage::Storage;
+use crate::storage::{KeyEncoder, Storage};
 use crate::tx::Tx;
 use std::sync::{Arc, Mutex};
 
@@ -10,6 +11,13 @@ pub struct World {
 }
 
 impl World {
+    pub fn new(storage: Arc<Storage>) -> Self {
+        Self {
+            storage,
+            registry: Arc::new(Mutex::new(Registry::default())),
+        }
+    }
+
     pub fn open_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             storage: Arc::new(Storage::open(path)?),
@@ -25,6 +33,28 @@ impl World {
         &self,
     ) -> Query<T> {
         Query::new(self.storage.clone()).with_registry(Some(self.registry.clone()))
+    }
+
+    pub fn outgoing_edges<E: crate::Edge>(&self, thing: u128) -> Vec<(u128, E)> {
+        edge::outgoing_edges(&self.storage, thing)
+    }
+
+    pub fn incoming_edges<E: crate::Edge>(&self, thing: u128) -> Vec<(u128, E)> {
+        edge::incoming_edges(&self.storage, thing)
+    }
+
+    pub fn traverse(&self, from: u128) -> Traversal {
+        Traversal::new(self.storage.clone(), from)
+    }
+
+    /// Fetch a single entity's component data by entity ID.
+    /// Returns `None` if the entity doesn't have this component.
+    pub fn get_component<T: crate::Attribute>(&self, thing: u128) -> Option<T> {
+        let hash = crate::hash_name(<T as crate::Attribute>::NAME);
+        let arch_id = self.storage.get_entity_archetype(thing)?;
+        let key = KeyEncoder::encode(arch_id, hash, thing);
+        let data = self.storage.get(&key)?;
+        postcard::from_bytes(&data).ok()
     }
 }
 

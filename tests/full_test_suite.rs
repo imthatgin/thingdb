@@ -411,8 +411,6 @@ async fn test_destroy_does_not_affect_others() {
     assert_eq!(healths[0].0, 200);
 }
 
-// ── Error & edge-case paths ─────────────────────────────────────────
-
 #[tokio::test]
 async fn test_add_duplicate_component_is_noop() {
     let world = get_test_world();
@@ -545,8 +543,6 @@ async fn test_add_component_to_existing_entity_updates_archetype() {
     assert_eq!(positions.len(), 1);
 }
 
-// ── RocksDB fallback (cold cache) ───────────────────────────────────
-
 #[tokio::test]
 async fn test_rocksdb_fallback_reopens_database() {
     let dir = format!("/tmp/test_rocksdb_fallback_{}", std::process::id());
@@ -598,8 +594,6 @@ async fn test_rocksdb_fallback_empty_database() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
-
-// ── Large-scale archetype migration ─────────────────────────────────
 
 #[tokio::test]
 async fn test_large_scale_archetype_migration() {
@@ -665,8 +659,6 @@ async fn test_large_scale_archetype_migration() {
     let players_with_health: Vec<Player> = world.query::<Player>().with::<Health>().run().await;
     assert_eq!(players_with_health.len(), 30);
 }
-
-// ── Complex component types ─────────────────────────────────────────
 
 #[derive(Serialize, Deserialize)]
 struct Inventory {
