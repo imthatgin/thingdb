@@ -1,6 +1,5 @@
 use crate::archetype::Registry;
 use crate::storage::{KeyEncoder, Storage};
-use rust_rocksdb::WriteBatch;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -297,18 +296,9 @@ impl Tx {
     }
 
     pub async fn commit(self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut batch = WriteBatch::default();
-
         // Apply deletes before puts so that if a key is both deleted and re-put,
-        // the put wins (RocksDB applies ops in order within a batch)
-        for key in &self.deletes {
-            batch.delete(key);
-        }
-        for (key, value) in &self.puts {
-            batch.put(key, value);
-        }
-
-        self.storage.write_batch(&batch)?;
+        // the put wins (batch applies ops in order)
+        self.storage.commit_batch(&self.deletes, &self.puts)?;
 
         // In memory archetype cache
         if let Some(cache) = &self.cache {

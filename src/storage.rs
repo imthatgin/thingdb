@@ -1,36 +1,37 @@
-use rust_rocksdb::{IteratorMode, WriteBatch, DB};
 use std::error::Error;
-use std::sync::Arc;
 
 pub struct Storage {
-    db: Arc<DB>,
+    db: fjall::Database,
+    keyspace: fjall::Keyspace,
 }
 
 impl Clone for Storage {
     fn clone(&self) -> Self {
         Self {
             db: self.db.clone(),
+            keyspace: self.keyspace.clone(),
         }
     }
 }
 
 impl Storage {
     pub fn open(path: &str) -> Result<Self, Box<dyn Error>> {
-        let db = DB::open_default(path)?;
-        Ok(Self { db: Arc::new(db) })
+        let db = fjall::Database::builder(path).open()?;
+        let keyspace = db.keyspace("default", || fjall::KeyspaceCreateOptions::default())?;
+        Ok(Self { db, keyspace })
     }
 
     pub async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Box<dyn Error>> {
-        self.db.put(key, value)?;
+        self.keyspace.insert(key, value)?;
         Ok(())
     }
 
     pub fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.db.get(key).ok().flatten()
+        self.keyspace.get(key).ok().flatten().map(|v| v.to_vec())
     }
 
     pub async fn delete(&self, key: &[u8]) -> Result<(), Box<dyn Error>> {
-        self.db.delete(key)?;
+        self.keyspace.remove(key)?;
         Ok(())
     }
 
@@ -38,30 +39,33 @@ impl Storage {
     where
         F: FnMut(&[u8], &[u8]),
     {
-        let mode = IteratorMode::From(prefix, rust_rocksdb::Direction::Forward);
-        for item in self.db.iterator(mode) {
-            match item {
-                Ok((key, value)) => {
-                    if !key.starts_with(prefix) {
-                        break;
-                    }
-                    f(&key, &value);
-                }
+        for item in self.keyspace.prefix(prefix) {
+            match item.into_inner() {
+                Ok((key, value)) => f(&key, &value),
                 Err(_) => break,
             }
         }
     }
 
-    pub fn write_batch(&self, batch: &WriteBatch) -> Result<(), Box<dyn Error>> {
-        self.db.write(batch)?;
+    pub fn commit_batch(
+        &self,
+        deletes: &[Vec<u8>],
+        puts: &[(Vec<u8>, Vec<u8>)],
+    ) -> Result<(), Box<dyn Error>> {
+        let mut batch = self.db.batch();
+        for key in deletes {
+            batch.remove(&self.keyspace, key.clone());
+        }
+        for (key, value) in puts {
+            batch.insert(&self.keyspace, key.clone(), value.clone());
+        }
+        batch.commit()?;
         Ok(())
     }
 
     pub fn get_many(&self, keys: &[Vec<u8>]) -> Vec<Option<Vec<u8>>> {
-        self.db
-            .multi_get(keys)
-            .into_iter()
-            .map(|r| r.ok().flatten())
+        keys.iter()
+            .map(|k| self.keyspace.get(k).ok().flatten().map(|v| v.to_vec()))
             .collect()
     }
 
@@ -72,7 +76,7 @@ impl Storage {
         archetype_id: u64,
     ) -> Result<(), Box<dyn Error>> {
         let key = Self::entity_to_archetype_key(thing_id);
-        self.db.put(&key, &archetype_id.to_le_bytes())?;
+        self.keyspace.insert(&key, &archetype_id.to_le_bytes())?;
         Ok(())
     }
 
@@ -94,7 +98,7 @@ impl Storage {
         attr_hash: u64,
     ) -> Result<(), Box<dyn Error>> {
         let key = Self::entity_attr_key(thing_id, attr_hash);
-        self.db.put(&key, &attr_hash.to_le_bytes())?;
+        self.keyspace.insert(&key, &attr_hash.to_le_bytes())?;
         Ok(())
     }
 
@@ -105,14 +109,14 @@ impl Storage {
         attr_hash: u64,
     ) -> Result<(), Box<dyn Error>> {
         let key = Self::entity_attr_key(thing_id, attr_hash);
-        self.db.delete(&key)?;
+        self.keyspace.remove(&key)?;
         Ok(())
     }
 
     #[allow(clippy::await_solo)]
     pub async fn delete_entity_archetype(&self, thing_id: u128) -> Result<(), Box<dyn Error>> {
         let key = Self::entity_to_archetype_key(thing_id);
-        self.db.delete(&key)?;
+        self.keyspace.remove(&key)?;
         Ok(())
     }
 
@@ -135,7 +139,7 @@ impl Storage {
         attr_hash: u64,
     ) -> Result<(), Box<dyn Error>> {
         let key = Self::attr_index_key(attr_hash, thing_id);
-        self.db.put(&key, b"")?;
+        self.keyspace.insert(&key, b"")?;
         Ok(())
     }
 
@@ -145,7 +149,7 @@ impl Storage {
         attr_hash: u64,
     ) -> Result<(), Box<dyn Error>> {
         let key = Self::attr_index_key(attr_hash, thing_id);
-        self.db.delete(&key)?;
+        self.keyspace.remove(&key)?;
         Ok(())
     }
 
