@@ -80,6 +80,14 @@ impl Storage {
         Ok(())
     }
 
+    pub fn get_attr<T: crate::attribute::Attribute>(&self, thing_id: u128) -> Option<T> {
+        let hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
+        let arch_id = self.get_entity_archetype(thing_id)?;
+        let key = KeyEncoder::encode(arch_id, hash, thing_id);
+        let data = self.get(&key)?;
+        postcard::from_bytes(&data).ok()
+    }
+
     pub fn get_entity_archetype(&self, thing_id: u128) -> Option<u64> {
         let key = Self::entity_to_archetype_key(thing_id);
         self.get(&key).map(|v| {

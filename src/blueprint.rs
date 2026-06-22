@@ -1,8 +1,13 @@
+use crate::storage::Storage;
 use crate::thing::Thing;
 use crate::tx::Tx;
 
 pub trait Blueprint {
     fn apply(self, tx: &mut Tx, entity: Thing) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+pub trait AttributeSet: Blueprint + Sized {
+    fn fetch(storage: &Storage, entity: Thing) -> Option<Self>;
 }
 
 impl Blueprint for () {
@@ -44,6 +49,43 @@ impl_blueprint_for_tuples!(@impl A, B, C, D, E, F, G, H, I);
 impl_blueprint_for_tuples!(@impl A, B, C, D, E, F, G, H, I, J);
 impl_blueprint_for_tuples!(@impl A, B, C, D, E, F, G, H, I, J, K);
 impl_blueprint_for_tuples!(@impl A, B, C, D, E, F, G, H, I, J, K, L);
+
+impl AttributeSet for () {
+    fn fetch(_storage: &Storage, _entity: Thing) -> Option<Self> {
+        Some(())
+    }
+}
+
+impl<T: crate::attribute::Attribute> AttributeSet for T {
+    fn fetch(storage: &Storage, entity: Thing) -> Option<Self> {
+        storage.get_attr::<T>(entity)
+    }
+}
+
+macro_rules! impl_attrset_for_tuples {
+    (@impl $($T:ident),+) => {
+        impl<$($T: crate::attribute::Attribute),+> AttributeSet for ($($T,)+) {
+            #[allow(non_snake_case)]
+            fn fetch(storage: &Storage, entity: Thing) -> Option<Self> {
+                $(let $T = storage.get_attr::<$T>(entity)?;)+
+                Some(($($T,)+))
+            }
+        }
+    };
+}
+
+impl_attrset_for_tuples!(@impl A);
+impl_attrset_for_tuples!(@impl A, B);
+impl_attrset_for_tuples!(@impl A, B, C);
+impl_attrset_for_tuples!(@impl A, B, C, D);
+impl_attrset_for_tuples!(@impl A, B, C, D, E);
+impl_attrset_for_tuples!(@impl A, B, C, D, E, F);
+impl_attrset_for_tuples!(@impl A, B, C, D, E, F, G);
+impl_attrset_for_tuples!(@impl A, B, C, D, E, F, G, H);
+impl_attrset_for_tuples!(@impl A, B, C, D, E, F, G, H, I);
+impl_attrset_for_tuples!(@impl A, B, C, D, E, F, G, H, I, J);
+impl_attrset_for_tuples!(@impl A, B, C, D, E, F, G, H, I, J, K);
+impl_attrset_for_tuples!(@impl A, B, C, D, E, F, G, H, I, J, K, L);
 
 #[cfg(test)]
 mod tests {

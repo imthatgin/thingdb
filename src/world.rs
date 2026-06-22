@@ -1,7 +1,8 @@
 use crate::archetype::Registry;
+use crate::blueprint::AttributeSet;
 use crate::edge::{self, Traversal};
 use crate::query::Query;
-use crate::storage::{KeyEncoder, Storage};
+use crate::storage::Storage;
 use crate::tx::Tx;
 use std::sync::{Arc, Mutex};
 
@@ -52,11 +53,15 @@ impl World {
     /// Fetch a single entity's component data by entity ID.
     /// Returns `None` if the entity doesn't have this component.
     pub fn get_component<T: crate::attribute::Attribute>(&self, thing: u128) -> Option<T> {
-        let hash = crate::hash_name(<T as crate::attribute::Attribute>::NAME);
-        let arch_id = self.storage.get_entity_archetype(thing)?;
-        let key = KeyEncoder::encode(arch_id, hash, thing);
-        let data = self.storage.get(&key)?;
-        postcard::from_bytes(&data).ok()
+        self.storage.get_attr::<T>(thing)
+    }
+
+    /// Fetch a domain entity by its thing ID, reconstructing it from its
+    /// constituent attributes. Returns `None` if the entity is missing any
+    /// of the required attributes.
+    pub fn get_entity<E: crate::entity::Entity>(&self, thing: u128) -> Option<E> {
+        let attrs = E::Attributes::fetch(&self.storage, thing)?;
+        Some(E::from_attributes(attrs))
     }
 }
 

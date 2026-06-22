@@ -207,6 +207,13 @@ impl Tx {
         Ok(entity)
     }
 
+    pub async fn spawn_entity<E: crate::entity::Entity>(
+        &mut self,
+        entity: E,
+    ) -> Result<u128, Box<dyn std::error::Error>> {
+        self.spawn_with(entity.into_attributes()).await
+    }
+
     pub async fn set<T: crate::attribute::Attribute + 'static>(
         &mut self,
         thing: u128,
